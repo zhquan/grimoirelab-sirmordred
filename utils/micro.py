@@ -29,7 +29,7 @@ import sys
 
 from sirmordred.config import Config
 from sirmordred.task_collection import TaskRawDataCollection
-from sirmordred.task_identities import TaskIdentitiesMerge, TaskIdentitiesLoad
+from sirmordred.task_identities import TaskIdentitiesMerge
 from sirmordred.task_enrich import TaskEnrich
 from sirmordred.task_panels import TaskPanels, TaskPanelsMenu
 from sirmordred.task_projects import TaskProjects
@@ -40,14 +40,13 @@ COLOR_LOG_FORMAT_SUFFIX = "\033[1m %(log_color)s "
 LOG_COLORS = {'DEBUG': 'white', 'INFO': 'cyan', 'WARNING': 'yellow', 'ERROR': 'red', 'CRITICAL': 'red,bg_white'}
 
 
-def micro_mordred(cfg_path, backend_sections, repos_to_check, raw, identities_load, identities_merge, enrich, panels):
+def micro_mordred(cfg_path, backend_sections, repos_to_check, raw, identities_merge, enrich, panels):
     """Execute the Mordred tasks using the configuration file (`cfg_path`).
 
     :param cfg_path: the path of a Mordred configuration file
     :param backend_sections: the backend sections where the raw/enrich/identities phases will be executed
     :param repos_to_check: process a repository only if it is in this list, or `None` for all repos
     :param raw: if true, it activates the collection of raw data
-    :param identities_load: if true, it activates the identities loading process
     :param identities_merge: if true, it activates the identities merging process
     :param enrich: if true, it activates the enrichment of the raw data
     :param panels: if true, it activates the upload of all panels declared in the configuration file
@@ -58,9 +57,6 @@ def micro_mordred(cfg_path, backend_sections, repos_to_check, raw, identities_lo
     if raw:
         for backend in backend_sections:
             get_raw(config, backend, repos_to_check)
-
-    if identities_load:
-        get_identities_load(config)
 
     if identities_merge:
         get_identities_merge(config)
@@ -102,17 +98,6 @@ def get_identities_merge(config):
     task = TaskIdentitiesMerge(config)
     task.execute()
     logging.info("Merging identities finished!")
-
-
-def get_identities_load(config):
-    """Execute the load identities phase
-
-    :param config: a Mordred config object
-    """
-    TaskProjects(config).execute()
-    task = TaskIdentitiesLoad(config)
-    task.execute()
-    logging.info("Loading identities finished!")
 
 
 def get_enrich(config, backend_section, repos_to_check=None):
@@ -196,8 +181,6 @@ def get_params_parser():
                         help="Activate raw task")
     parser.add_argument("--enrich", action='store_true', dest='enrich',
                         help="Activate enrich task")
-    parser.add_argument("--identities-load", action='store_true', dest='identities_load',
-                        help="Activate load identities task")
     parser.add_argument("--identities-merge", action='store_true', dest='identities_merge',
                         help="Activate merge identities task")
     parser.add_argument("--panels", action='store_true', dest='panels',
@@ -224,7 +207,7 @@ def get_params():
     parser = get_params_parser()
     args = parser.parse_args()
 
-    tasks = [args.raw, args.enrich, args.identities_load, args.identities_merge, args.panels]
+    tasks = [args.raw, args.enrich, args.identities_merge, args.panels]
 
     if not any(tasks):
         print("No tasks enabled")
@@ -242,7 +225,6 @@ if __name__ == '__main__':
     config_logging(args.debug, args.logs_dir)
     micro_mordred(args.cfg_path, args.backend_sections,
                   args.repos_to_check, args.raw,
-                  args.identities_load,
                   args.identities_merge,
                   args.enrich,
                   args.panels)
