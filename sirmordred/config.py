@@ -457,6 +457,18 @@ class Config():
                     "default": False,
                     "type": bool,
                     "description": "Add gender to the profiles (executes autogender)"
+                },
+                "path": {
+                    "optional": True,
+                    "default": "graphql/",
+                    "type": str,
+                    "description": "GraphQL path by default is `graphql/`"
+                },
+                "port": {
+                    "optional": True,
+                    "default": "8000",
+                    "type": str,
+                    "description": "GraphQL server port by default is `8000`"
                 }
             }
         }

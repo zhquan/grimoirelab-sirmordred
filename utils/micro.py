@@ -29,7 +29,7 @@ import sys
 
 from sirmordred.config import Config
 from sirmordred.task_collection import TaskRawDataCollection
-from sirmordred.task_identities import TaskIdentitiesMerge, TaskIdentitiesLoad
+from sirmordred.task_identities import TaskIdentitiesMerge
 from sirmordred.task_enrich import TaskEnrich
 from sirmordred.task_panels import TaskPanels, TaskPanelsMenu
 from sirmordred.task_projects import TaskProjects

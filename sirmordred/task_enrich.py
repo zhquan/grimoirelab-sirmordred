@@ -44,8 +44,11 @@ from sirmordred.task import Task
 from sirmordred.task_manager import TasksManager
 from sirmordred.task_projects import TaskProjects
 
-from sortinghat import api
-from sortinghat.db.database import Database
+from sortinghat.cli.client import (SortingHatClient,
+                                   SortingHatClientError,
+                                   SortingHatSchema)
+
+from sgqlc.operation import Operation
 
 
 logger = logging.getLogger(__name__)
@@ -64,7 +67,7 @@ class TaskEnrich(Task):
         if self.db_sh is None and self.db_host is None:
             self.db = None
         else:
-            self.db = Database(**self.sh_kwargs)
+            self.db = self.client
 
         autorefresh_interval = self.conf['es_enrichment']['autorefresh_interval']
         self.last_autorefresh = self.__update_last_autorefresh(days=autorefresh_interval)
@@ -211,6 +214,103 @@ class TaskEnrich(Task):
         spent_time = str(datetime.now() - time_start).split('.')[0]
         logger.info('[%s] enrichment phase finished in %s', self.backend_section, spent_time)
 
+    def search_last_modified_unique_identities(self, after):
+        def _fetch_mk(entities, after):
+            mks = []
+            for e in entities:
+                mk = e['mk']
+                date = e['lastModified']
+                date_time_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+                if date_time_obj > after:
+                    mks.append(mk)
+
+            return mks
+
+        args = {
+            'page': 1,
+            'page_size': 10
+        }
+        try:
+            op = Operation(SortingHatSchema.Query)
+            op.individuals(**args)
+            individual = op.individuals().entities()
+            individual.mk()
+            individual.last_modified()
+            page_info = op.individuals().page_info()
+            page_info.has_next()
+            result = self.client.execute(op)
+            entities = result['data']['individuals']['entities']
+            mks = _fetch_mk(entities, after)
+            has_next = result['data']['individuals']['pageInfo']['hasNext']
+            while has_next:
+                page = args['page']
+                args['page'] = page + 1
+                op = Operation(SortingHatSchema.Query)
+                op.individuals(**args)
+                individual = op.individuals().entities()
+                individual.mk()
+                individual.last_modified()
+                page_info = op.individuals().page_info()
+                page_info.has_next()
+                result = self.client.execute(op)
+                entities = result['data']['individuals']['entities']
+                mks.extend(_fetch_mk(entities, after))
+                has_next = result['data']['individuals']['pageInfo']['hasNext']
+        except SortingHatClientError as e:
+            logger.error("[sortinghat] Error searching unique identities after {}"
+                         ": {}".format(after, e.errors[0]['message']))
+
+        return mks
+
+    def search_last_modified_identities(self, after):
+        def _fetch_mk(entities, after):
+            mks = []
+            for e in entities:
+                for id in e['identities']:
+                    date = id['lastModified']
+                    date_time_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S.%f+00:00')
+                    if date_time_obj > after:
+                        uuid = id['uuid']
+                        mks.append(uuid)
+
+            return mks
+
+        args = {
+            'page': 1,
+            'page_size': 10
+        }
+        try:
+            op = Operation(SortingHatSchema.Query)
+            op.individuals(**args)
+            individual = op.individuals().entities()
+            individual.identities().last_modified()
+            individual.identities().uuid()
+            page_info = op.individuals().page_info()
+            page_info.has_next()
+            result = self.client.execute(op)
+            entities = result['data']['individuals']['entities']
+            mks = _fetch_mk(entities, after)
+            has_next = result['data']['individuals']['pageInfo']['hasNext']
+            while has_next:
+                page = args['page']
+                args['page'] = page + 1
+                op = Operation(SortingHatSchema.Query)
+                op.individuals(**args)
+                individual = op.individuals().entities()
+                individual.identities().last_modified()
+                individual.identities().uuid()
+                page_info = op.individuals().page_info()
+                page_info.has_next()
+                result = self.client.execute(op)
+                entities = result['data']['individuals']['entities']
+                mks.extend(_fetch_mk(entities, after))
+                has_next = result['data']['individuals']['pageInfo']['hasNext']
+        except SortingHatClientError as e:
+            logger.error("[sortinghat] Error searching identities after {}"
+                         ": {}".format(after, e.errors[0]['message']))
+
+        return mks
+
     def __autorefresh(self, enrich_backend, studies=False):
         # Refresh projects
         field_id = enrich_backend.get_field_unique_id()
@@ -237,8 +337,8 @@ class TaskEnrich(Task):
         next_autorefresh = self.__update_last_autorefresh()
 
         logger.debug('Getting last modified identities from SH since %s for %s', after, self.backend_section)
-        uuids_refresh = api.search_last_modified_unique_identities(self.db, after)
-        ids_refresh = api.search_last_modified_identities(self.db, after)
+        uuids_refresh = self.search_last_modified_unique_identities(after)
+        ids_refresh = self.search_last_modified_identities(after)
 
         if uuids_refresh:
             logger.debug("Refreshing identity uuids for %s", self.backend_section)
@@ -350,6 +450,7 @@ class TaskEnrich(Task):
         """
         enrich_es = self.conf['es_enrichment']['url']
         sortinghat_db = self.db
+        sortinghat_client = self.client
         current_data_source = self.get_backend(self.backend_section)
         active_data_sources = self.config.get_active_data_sources()
 
@@ -418,6 +519,7 @@ class TaskEnrich(Task):
 
             if autorefresh and self.db:
                 logger.info('[%s] autorefresh start', self.backend_section)
+                a = self._get_enrich_backend()
                 self.__autorefresh(self._get_enrich_backend())
                 logger.info('[%s] autorefresh end', self.backend_section)
             else:

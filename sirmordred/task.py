@@ -28,6 +28,9 @@ import re
 from grimoire_elk.elk import get_ocean_backend
 from grimoire_elk.utils import get_connector_from_name, get_elastic
 from grimoire_elk.enriched.utils import grimoire_con
+from sortinghat.cli.client import (SortingHatClient,
+                                   SortingHatClientError,
+                                   SortingHatSchema)
 
 logger = logging.getLogger(__name__)
 
@@ -46,11 +49,18 @@ class Task():
         self.conf = config.get_conf()
 
         sortinghat = self.conf.get('sortinghat', None)
-        self.db_sh = sortinghat['database'] if sortinghat else None
-        self.db_user = sortinghat['user'] if sortinghat else None
-        self.db_password = sortinghat['password'] if sortinghat else None
-        self.db_host = sortinghat['host'] if sortinghat else None
-        self.db_unaffiliate_group = sortinghat['unaffiliated_group'] if sortinghat else None
+        self.db_sh = sortinghat.get('database', None)
+        self.db_user = sortinghat.get('user', None)
+        self.db_password = sortinghat.get('password', None)
+        self.db_host = sortinghat.get('host', '127.0.0.1')
+        self.db_path = sortinghat.get('path', 'graphql/')
+        self.db_port = sortinghat.get('port', '8000')
+        self.db_unaffiliate_group = sortinghat.get('unaffiliated_group', None)
+
+        self.client = SortingHatClient(host=self.db_host, port=self.db_port,
+                                       path=self.db_path, ssl=False,
+                                       user=self.db_user, password=self.db_password)
+        self.client.connect()
 
         self.sh_kwargs = {'user': self.db_user, 'password': self.db_password,
                           'database': self.db_sh, 'host': self.db_host,
