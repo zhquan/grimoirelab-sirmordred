@@ -18,6 +18,8 @@
 #
 # Authors:
 #     Alvaro del Castillo <acs@bitergia.com>
+#     Quan Zhou <quan@bitergia.com>
+#
 
 import json
 import sys
@@ -32,7 +34,8 @@ from urllib.parse import urljoin
 sys.path.insert(0, '..')
 
 from sirmordred.config import Config
-from sirmordred.task_panels import (KIBANA_SETTINGS_URL,
+from sirmordred.task_panels import (KIBANA_CONFIG_URL,
+                                    KIBANA_FIND_URL,
                                     TaskPanels,
                                     TaskPanelsMenu)
 
@@ -54,7 +57,7 @@ class MockedTaskPanels(TaskPanels):
         return
 
 
-def check_import_dashboard_stackexchange(elastic_url, import_file, es_index=None,
+def check_import_dashboard_stackexchange(elastic_url, kibana_url, import_file, es_index=None,
                                          data_sources=None, add_vis_studies=False, strict=False):
     """ Check that stackexchange data sources adds also stackoverflow
         data source which is the name used in panels """
@@ -65,97 +68,168 @@ def check_import_dashboard_stackexchange(elastic_url, import_file, es_index=None
 class TestTaskPanels(unittest.TestCase):
     """TaskPanels tests"""
 
+    @httpretty.activate
     def test_initialization(self):
         """Test whether attributes are initializated"""
 
         config = Config(CONF_FILE)
+        es_url = config.conf['es_enrichment']['url']
+        es_indices_url = urljoin(es_url, '_cat/indices')
+        httpretty.register_uri(httpretty.GET,
+                               es_indices_url,
+                               body='.kibana',
+                               status=200)
         task = TaskPanels(config)
 
         self.assertEqual(task.config, config)
 
     @unittest.mock.patch('sirmordred.task_panels.import_dashboard', side_effect=check_import_dashboard_stackexchange)
     @unittest.mock.patch('sirmordred.task_panels.get_dashboard_name')
+    @httpretty.activate
     def test_create_dashboard_stackexchange(self, mock_get_dashboard_name, mock_import_dashboard):
         """ Test the creation of a dashboard which includes stackexchange in data sources """
         mock_get_dashboard_name.return_value = ''
 
         config = Config(CONF_FILE)
-        task = TaskPanels(config)
-
-        panel_file = 'panels/json/stackoverflow.json'
-        task.create_dashboard(panel_file, data_sources=["stackexchange"])
-
-    @httpretty.activate
-    def test_create_dashboard_multi_ds_kibiter_6(self):
-        """ Test the creation of dashboards with filtered data sources """
-
-        config = Config(CONF_FILE)
         es_url = config.conf['es_enrichment']['url']
-        es_kibana_url = urljoin(es_url + "/", '.kibana')
-        kibiter_api_url = urljoin(config.conf['panels']['kibiter_url'], KIBANA_SETTINGS_URL)
-        kibiter_defaultIndex_url = kibiter_api_url + '/defaultIndex'
-        kibiter_timePicker_url = kibiter_api_url + '/timepicker:timeDefaults'
+        kibiter_url = config.conf['panels']['kibiter_url']
+        es_indices_url = urljoin(es_url, '_cat/indices')
+        es_kibana_url = urljoin(es_url, '.kibana')
+        kibiter_api_set_config = urljoin(kibiter_url, KIBANA_CONFIG_URL) + '/7.10.0'
+        kibiter_api_find = urljoin(kibiter_url, KIBANA_FIND_URL + '?type=config')
 
         headers = {
             "Content-Type": "application/json",
             "kbn-xsrf": "true"
         }
-
+        body_find = {
+            "page": 1,
+            "per_page": 20,
+            "total": 1,
+            "saved_objects": [
+                {
+                    "type": "config",
+                    "id": "7.10.0"
+                }
+            ]
+        }
+        httpretty.register_uri(httpretty.GET,
+                               es_indices_url,
+                               body='.kibana',
+                               status=200)
         httpretty.register_uri(httpretty.GET,
                                es_kibana_url,
-                               body={},
+                               body='',
                                status=200)
-
-        httpretty.register_uri(httpretty.POST,
-                               kibiter_defaultIndex_url,
-                               body={},
+        httpretty.register_uri(httpretty.GET,
+                               kibiter_api_find,
+                               body=json.dumps(body_find),
+                               status=200)
+        httpretty.register_uri(httpretty.PUT,
+                               kibiter_api_set_config,
+                               body='{}',
                                status=200,
                                forcing_headers=headers)
 
-        httpretty.register_uri(httpretty.POST,
-                               kibiter_timePicker_url,
-                               body={},
+        panel_file = 'panels/json/stackoverflow.json'
+        task = TaskPanels(config)
+        task.create_dashboard(panel_file, data_sources=["stackexchange"])
+
+    @httpretty.activate
+    def test_create_dashboard_multi_ds_kibiter_7(self):
+        """ Test the creation of dashboards with filtered data sources """
+
+        config = Config(CONF_FILE)
+        es_url = config.conf['es_enrichment']['url']
+        kibiter_url = config.conf['panels']['kibiter_url']
+        es_indices_url = urljoin(es_url, '_cat/indices')
+        es_kibana_url = urljoin(es_url, '.kibana')
+        kibiter_api_set_config = urljoin(kibiter_url, KIBANA_CONFIG_URL) + '/7.10.0'
+        kibiter_api_find = urljoin(kibiter_url, KIBANA_FIND_URL + '?type=config')
+
+        headers = {
+            "Content-Type": "application/json",
+            "kbn-xsrf": "true"
+        }
+        body_find = {
+            "page": 1,
+            "per_page": 20,
+            "total": 1,
+            "saved_objects": [
+                {
+                    "type": "config",
+                    "id": "7.10.0"
+                }
+            ]
+        }
+        httpretty.register_uri(httpretty.GET,
+                               es_indices_url,
+                               body='.kibana',
+                               status=200)
+        httpretty.register_uri(httpretty.GET,
+                               es_kibana_url,
+                               body='',
+                               status=200)
+        httpretty.register_uri(httpretty.GET,
+                               kibiter_api_find,
+                               body=json.dumps(body_find),
+                               status=200)
+        httpretty.register_uri(httpretty.PUT,
+                               kibiter_api_set_config,
+                               body='{}',
                                status=200,
                                forcing_headers=headers)
 
-        MockedTaskPanels.VERSION = '6.1.0'
+        MockedTaskPanels.VERSION = '7.10.0'
         task = MockedTaskPanels(config)
         task.execute()
 
     @httpretty.activate
-    def test_create_dashboard_multi_ds_kibiter_6_hhtp_error(self):
+    def test_create_dashboard_multi_ds_kibiter_7_hhtp_error(self):
         """ Test the creation of dashboards with filtered data sources """
 
         config = Config(CONF_FILE)
         es_url = config.conf['es_enrichment']['url']
-        es_kibana_url = urljoin(es_url + "/", '.kibana')
-        kibiter_api_url = urljoin(config.conf['panels']['kibiter_url'], KIBANA_SETTINGS_URL)
-        kibiter_defaultIndex_url = kibiter_api_url + '/defaultIndex'
-        kibiter_timePicker_url = kibiter_api_url + '/timepicker:timeDefaults'
+        kibiter_url = config.conf['panels']['kibiter_url']
+        es_indices_url = urljoin(es_url, '_cat/indices')
+        es_kibana_url = urljoin(es_url, '.kibana')
+        kibiter_api_set_config = urljoin(kibiter_url, KIBANA_CONFIG_URL) + '/7.10.0'
+        kibiter_api_find = urljoin(kibiter_url, KIBANA_FIND_URL + '?type=config')
 
         headers = {
             "Content-Type": "application/json",
             "kbn-xsrf": "true"
         }
-
+        body_find = {
+            "page": 1,
+            "per_page": 20,
+            "total": 1,
+            "saved_objects": [
+                {
+                    "type": "config",
+                    "id": "7.10.0"
+                }
+            ]
+        }
+        httpretty.register_uri(httpretty.GET,
+                               es_indices_url,
+                               body='.kibana',
+                               status=200)
         httpretty.register_uri(httpretty.GET,
                                es_kibana_url,
-                               body='{}',
+                               body='',
                                status=200)
-
-        httpretty.register_uri(httpretty.POST,
-                               kibiter_defaultIndex_url,
-                               body='{}',
-                               status=200,
-                               forcing_headers=headers)
-
-        httpretty.register_uri(httpretty.POST,
-                               kibiter_timePicker_url,
+        httpretty.register_uri(httpretty.GET,
+                               kibiter_api_find,
+                               body=json.dumps(body_find),
+                               status=200)
+        httpretty.register_uri(httpretty.PUT,
+                               kibiter_api_set_config,
                                body='{}',
                                status=401,
                                forcing_headers=headers)
 
-        MockedTaskPanels.VERSION = '6.1.0'
+        MockedTaskPanels.VERSION = '7.10.0'
         task = MockedTaskPanels(config)
         task.execute()
 
@@ -163,10 +237,18 @@ class TestTaskPanels(unittest.TestCase):
 class TestTaskPanelsMenu(unittest.TestCase):
     """TaskPanelsMenu tests"""
 
+    @httpretty.activate
     def test_initialization(self):
         """Test whether attributes are initializated"""
 
         config = Config(CONF_FILE)
+        es_url = config.conf['es_enrichment']['url']
+        es_indices_url = urljoin(es_url, '_cat/indices')
+
+        httpretty.register_uri(httpretty.GET,
+                               es_indices_url,
+                               body='.kibana',
+                               status=200)
         task = TaskPanelsMenu(config)
 
         self.assertEqual(task.config, config)

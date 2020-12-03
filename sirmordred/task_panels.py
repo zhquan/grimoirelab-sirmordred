@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# Copyright (C) 2015-2019 Bitergia
+# Copyright (C) 2015-2020 Bitergia
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 # Authors:
 #     Luis Cañas-Díaz <lcanas@bitergia.com>
 #     Alvaro del Castillo <acs@bitergia.com>
+#     Quan Zhou <quan@bitergia.com>
 #
 
 import copy
@@ -30,15 +31,20 @@ import yaml
 
 import panels
 from grimoirelab_toolkit.uris import urijoin
+from grimoire_elk.enriched.utils import grimoire_con
 
 from kidash.kidash import import_dashboard, get_dashboard_name, check_kibana_index
 from sirmordred.task import Task
 
 logger = logging.getLogger(__name__)
 
-# Header mandatory in ElasticSearch 6
+# Header mandatory in ElasticSearch 6 or higher
 ES6_HEADER = {"Content-Type": "application/json"}
-KIBANA_SETTINGS_URL = '/api/kibana/settings'
+
+# API changed in ElasticSearch 7
+KIBANA_SAVED_OBJECTS = '/api/saved_objects'
+KIBANA_CONFIG_URL = KIBANA_SAVED_OBJECTS + '/config'
+KIBANA_FIND_URL = KIBANA_SAVED_OBJECTS + '/_find'
 
 STRICT_LOADING = "strict"
 
@@ -252,6 +258,23 @@ def get_sigils_path():
     return sigils_path
 
 
+def get_kibana_index(url):
+    """ Get the admin .kibana index name.
+
+    :param url: ES endpoint URL
+
+    :return: admin .kibana index name
+    """
+    r = grimoire_con().get(url + '/_cat/aliases', headers=ES6_HEADER,
+                           verify=False)
+    r.raise_for_status()
+    lines = r.text.split("\n")
+    col1 = [line.split()[0] for line in lines if line != '']
+    aliases = [alias for alias in col1 if '_admin' in alias]
+    index = aliases[0] if len(aliases) >= 1 else '.kibana'
+    return index
+
+
 class TaskPanels(Task):
     """
     Upload all the Kibana dashboards/GrimoireLab panels based on
@@ -334,22 +357,36 @@ class TaskPanels(Task):
         if self.conf['panels'][COLIC_SOURCE]:
             self.panels[COLIC_SOURCE] = [COLIC_PANEL, COLIC_IP, COLIC_STUDY_IP]
 
+        self.kibana_index = get_kibana_index(self.conf['es_enrichment']['url'])
+
     def is_backend_task(self):
         return False
 
-    def __configure_kibiter_setting(self, endpoint, data_value=None):
+    def __fetch_kibiter_config_id(self):
+        kibana_url = urijoin(self.conf['panels']['kibiter_url'], KIBANA_FIND_URL + '?type=config')
+        try:
+            res = self.grimoire_con.get(kibana_url, verify=False)
+            res.raise_for_status()
+            data = res.json()
+            config_id = [s_object["id"] for s_object in data["saved_objects"] if s_object["type"] == "config"][0]
+            self.kibana_version = config_id
+        except requests.exceptions.HTTPError:
+            logger.error("Impossible to fetch {}: {}".format(kibana_url, res.json()))
+            return False
+        return True
+
+    def __configure_kibiter_setting(self, data_value=None):
         kibana_headers = copy.deepcopy(ES6_HEADER)
         kibana_headers["kbn-xsrf"] = "true"
 
-        kibana_url = self.conf['panels']['kibiter_url'] + KIBANA_SETTINGS_URL
-        endpoint_url = kibana_url + '/' + endpoint
+        kibana_url = urijoin(self.conf['panels']['kibiter_url'], KIBANA_CONFIG_URL, self.kibana_version)
 
         try:
-            res = self.grimoire_con.post(endpoint_url, headers=kibana_headers,
-                                         data=json.dumps(data_value), verify=False)
+            res = self.grimoire_con.put(kibana_url, headers=kibana_headers,
+                                        data=json.dumps(data_value), verify=False)
             res.raise_for_status()
         except requests.exceptions.HTTPError:
-            logger.error("Impossible to set %s: %s", endpoint, str(res.json()))
+            logger.error("Impossible to set %s: %s", kibana_url, str(res.json()))
             return False
         except requests.exceptions.ConnectionError as ex:
             logger.error("Impossible to connect to kibiter %s: %s",
@@ -358,7 +395,7 @@ class TaskPanels(Task):
 
         return True
 
-    def __configure_kibiter_6(self):
+    def __configure_kibiter_7(self):
         if 'panels' not in self.conf:
             logger.warning("Panels config not availble. Not configuring Kibiter.")
             return False
@@ -366,22 +403,24 @@ class TaskPanels(Task):
         # Create .kibana index if not exists
         es_url = self.conf['es_enrichment']['url']
         kibiter_url = self.conf['panels']['kibiter_url']
-        check_kibana_index(es_url, kibiter_url)
+        check_kibana_index(es_url, kibiter_url, kibana_index=self.kibana_index)
 
-        # set default index pattern
+        # fetch config id
+        kibiter_config_id = self.__fetch_kibiter_config_id()
+
+        # set default index pattern and set default time picker
         kibiter_default_index = self.conf['panels']['kibiter_default_index']
-        data_value = {"value": kibiter_default_index}
-        defaultIndexFlag = self.__configure_kibiter_setting('defaultIndex',
-                                                            data_value=data_value)
-
-        # set default time picker
         kibiter_time_from = self.conf['panels']['kibiter_time_from']
-        time_picker = {"from": kibiter_time_from, "to": "now", "mode": "quick"}
-        data_value = {"value": json.dumps(time_picker)}
-        timePickerFlag = self.__configure_kibiter_setting('timepicker:timeDefaults',
-                                                          data_value=data_value)
+        time_picker = {"from": kibiter_time_from, "to": "now"}
+        data_value = {
+            "attributes": {
+                "defaultIndex": kibiter_default_index,
+                "timepicker:timeDefaults": json.dumps(time_picker)
+            }
+        }
+        kibiter_default_conf = self.__configure_kibiter_setting(data_value=data_value)
 
-        if defaultIndexFlag and timePickerFlag:
+        if kibiter_config_id and kibiter_default_conf:
             logger.info("Kibiter settings configured!")
             return True
 
@@ -421,7 +460,8 @@ class TaskPanels(Task):
 
         panels_path = get_sigils_path() + panel_file
         try:
-            import_dashboard(es_enrich, kibana_url, panels_path, data_sources=data_sources, strict=strict)
+            import_dashboard(es_enrich, kibana_url, panels_path, data_sources=data_sources,
+                             strict=strict, es_index=self.kibana_index)
         except ValueError:
             logger.error("%s does not include release field. Not loading the panel.", panels_path)
         except RuntimeError:
@@ -432,7 +472,7 @@ class TaskPanels(Task):
         kibiter_major = self.es_version(self.conf['es_enrichment']['url'])
         strict_loading = self.conf['panels'][STRICT_LOADING]
 
-        self.__configure_kibiter_6()
+        self.__configure_kibiter_7()
 
         logger.info("Dashboard panels, visualizations: uploading...")
         # Create the commons panels
@@ -520,6 +560,8 @@ class TaskPanelsMenu(Task):
         else:
             self.project_name = 'GrimoireLab'
 
+        self.kibana_index = get_kibana_index(self.conf['es_enrichment']['url'])
+
     def is_backend_task(self):
         return False
 
@@ -539,14 +581,14 @@ class TaskPanelsMenu(Task):
         """Upload to Kibiter the title for the dashboard.
 
         The title is shown on top of the dashboard menu, and is Usually
-        the name of the project being dashboarded.
+        the name of the project being dashboard.
         This is done only for Kibiter 6.x.
 
         :param kibiter_major: major version of kibiter
         """
-        resource = ".kibana/doc/projectname"
+        resource = self.kibana_index + "/_doc/projectname"
         data = {"projectname": {"name": self.project_name}}
-        mapping_resource = ".kibana/_mapping/doc"
+        mapping_resource = self.kibana_index + "/_mapping"
         mapping = {"dynamic": "true"}
 
         url = urijoin(self.conf['es_enrichment']['url'], resource)
@@ -578,8 +620,8 @@ class TaskPanelsMenu(Task):
         :param kibiter_major: major version of kibiter
         """
         logger.info("Adding dashboard menu")
-        menu_resource = ".kibana/doc/metadashboard"
-        mapping_resource = ".kibana/_mapping/doc"
+        menu_resource = self.kibana_index + "/_doc/metadashboard"
+        mapping_resource = self.kibana_index + "/_mapping"
         mapping = {"dynamic": "true"}
         menu = {'metadashboard': dash_menu}
         menu_url = urijoin(self.conf['es_enrichment']['url'],
@@ -611,7 +653,7 @@ class TaskPanelsMenu(Task):
         :param kibiter_major: major version of kibiter
         """
         logger.info("Removing old dashboard menu, if any")
-        metadashboard = ".kibana/doc/metadashboard"
+        metadashboard = self.kibana_index + "/_doc/metadashboard"
         menu_url = urijoin(self.conf['es_enrichment']['url'], metadashboard)
         self.grimoire_con.delete(menu_url)
 
