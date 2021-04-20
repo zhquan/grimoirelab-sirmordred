@@ -1,0 +1,61 @@
+[tool.poetry]
+name = "SirMordred"
+version = "0.77.0"
+description = "SirMordred processes and stores software development data to ElasticSearch"
+readme = "README.md"
+authors = [
+   "Bitergia <grimoirelab-discussions@lists.linuxfoundation.org>"
+]
+repository = "https://github.com/chaoss/grimoirelab-sirmordred"
+keywords = ["development repositories analytics"]
+license = "GPL-3.0-or-later"
+classifiers=[
+    'Development Status :: 5 - Production/Stable',
+    'Intended Audience :: Developers',
+    'Topic :: Software Development',
+    'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.6'
+]
+
+packages = [
+   { include = "sirmordred"},
+   { include = "tests", format = "sdist" },
+]
+
+[tool.poetry.extras]
+mysql = ["PyMySQL"]
+
+[tool.poetry.urls]
+"Bug Tracker" = "https://github.com/chaoss/grimoirelab-sirmordred/issues"
+
+[tool.poetry.scripts]
+p2o = 'utils.p2o:main'
+
+[tool.poetry.dependencies]
+python = "^3.6.1"
+elasticsearch = "6.3.1"
+elasticsearch-dsl = "6.3.1"
+colorlog = "4.1.0"
+file-read-backwards = "2.0.0"
+coveralls = "^3.0.1"
+grimoirelab-toolkit = {branch = "master", git = "https://github.com/chaoss/grimoirelab-toolkit"}
+sortinghat = {branch = "muggle", git = "https://github.com/chaoss/grimoirelab-sortinghat", optional = true}
+kidash = {branch = "master", git = "https://github.com/chaoss/grimoirelab-kidash"}
+grimoireelk = {branch = "sortinghat_graphql", git = "https://github.com/zhquan/GrimoireELK"}
+graal = {branch = "master", git = "https://github.com/chaoss/grimoirelab-graal"}
+cereslib = {branch = "master", git = "https://github.com/chaoss/grimoirelab-cereslib"}
+perceval = {branch = "python_3.6.1", git = "https://github.com/zhquan/perceval"}
+perceval-mozilla = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-mozilla"}
+perceval-opnfv = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-opnfv"}
+perceval-puppet = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-puppet"}
+perceval-finos = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-finos"}
+perceval-weblate = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-weblate"}
+grimoirelab-panels = {branch = "master", git = "https://github.com/chaoss/grimoirelab-sigils"}
+
+[tool.poetry.dev-dependencies]
+httpretty = "^0.9.6"
+
+[build-system]
+requires = ["poetry>=0.12"]
+build-backend = "poetry.masonry.api"
