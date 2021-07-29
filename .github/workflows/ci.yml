@@ -3,10 +3,10 @@ name: build
 on:
   push:
     branches:
-      - sortinghat_graphql
+      - '**'
   pull_request:
     branches:
-      - sortinghat_graphql
+      - '**'
 
 jobs:
   tests:
