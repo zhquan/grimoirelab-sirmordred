@@ -45,12 +45,12 @@ kidash = {branch = "master", git = "https://github.com/chaoss/grimoirelab-kidash
 grimoireelk = {branch = "sortinghat_graphql", git = "https://github.com/zhquan/GrimoireELK"}
 graal = {branch = "master", git = "https://github.com/chaoss/grimoirelab-graal"}
 cereslib = {branch = "master", git = "https://github.com/chaoss/grimoirelab-cereslib"}
-perceval = {branch = "python_3.6.1", git = "https://github.com/zhquan/perceval"}
-perceval-mozilla = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-mozilla"}
-perceval-opnfv = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-opnfv"}
-perceval-puppet = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-puppet"}
-perceval-finos = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-finos"}
-perceval-weblate = {branch = "python_3.6.1", git = "https://github.com/zhquan/grimoirelab-perceval-weblate"}
+perceval = {branch = "master", git = "https://github.com/chaoss/grimoirelab-perceval"}
+perceval-mozilla = {branch = "master", git = "https://github.com/chaoss/grimoirelab-perceval-mozilla"}
+perceval-opnfv = {branch = "master", git = "https://github.com/chaoss/grimoirelab-perceval-opnfv"}
+perceval-puppet = {branch = "master", git = "https://github.com/chaoss/grimoirelab-perceval-puppet"}
+perceval-finos = {branch = "master", git = "https://github.com/Bitergia/grimoirelab-perceval-finos"}
+perceval-weblate = {branch = "master", git = "https://github.com/chaoss/grimoirelab-perceval-weblate"}
 grimoirelab-panels = {branch = "master", git = "https://github.com/chaoss/grimoirelab-sigils"}
 
 [tool.poetry.dev-dependencies]
