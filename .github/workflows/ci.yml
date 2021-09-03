@@ -16,8 +16,7 @@ jobs:
       mysql:
         image: mysql:5.7
         env:
-          MYSQL_ROOT_PASSWORD:
-          MYSQL_ALLOW_EMPTY_PASSWORD: yes
+          MYSQL_ROOT_PASSWORD: root
         ports:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
@@ -66,8 +65,8 @@ jobs:
         DB_HOST: 127.0.0.1
         DB_PORT: ${{ job.services.mysql.ports[3306] }}
       run: |
-        mysql --host $DB_HOST --port $DB_PORT -uroot -e "SET GLOBAL sql_mode = 'NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'";
-        mysql --host $DB_HOST --port $DB_PORT -uroot -e "CREATE DATABASE test_sh";
+        mysql --host $DB_HOST --port $DB_PORT -uroot -proot -e "CREATE DATABASE test_sh"
+        mysql --host $DB_HOST --port $DB_PORT -uroot -proot -e "CREATE DATABASE test_projects"
 
     - name: Run Sortinghat Server
       run: |
@@ -84,14 +83,12 @@ jobs:
       
     - name: Lint with flake8
       run: |
-        source $HOME/.poetry/env
         poetry run flake8
       
     - name: Tests and Coverage
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
-        source $HOME/.poetry/env
         cd tests
         poetry run coverage run --source=sirmordred run_tests.py
         poetry run coveralls --service=github
