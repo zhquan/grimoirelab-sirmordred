@@ -9,7 +9,7 @@ ENV DEPLOY_USER bitergia
 ENV DEPLOY_USER_DIR /home/${DEPLOY_USER}
 ENV CONF_DIR ${DEPLOY_USER_DIR}/conf
 ENV SCRIPTS_DIR ${DEPLOY_USER_DIR}/scripts
-ENV GRIMOIRELAB_RELEASE "0.2.68"
+ENV GRIMOIRELAB_RELEASE "0.2.69"
 
 # Initial user
 RUN useradd ${DEPLOY_USER} --create-home --shell /bin/bash
@@ -66,9 +66,9 @@ USER ${DEPLOY_USER}
 WORKDIR ${DEPLOY_USER_DIR}
 
 RUN mkdir -p ${CONF_DIR} && \
-    wget https://raw.githubusercontent.com/chaoss/grimoirelab/master/releases/${GRIMOIRELAB_RELEASE} -O ${CONF_DIR}/requirements.cfg && \
+    wget https://raw.githubusercontent.com/zhquan/grimoirelab/2.69/releases/${GRIMOIRELAB_RELEASE} -O ${CONF_DIR}/requirements.cfg && \
     echo ${GRIMOIRELAB_RELEASE} > ${DEPLOY_USER_DIR}/release && \
-    git clone https://github.com/grimoirelab/grimoirelab.git --depth 1 && \
+    git clone https://github.com/zhquan/grimoirelab.git --branch 2.69 --depth 1 && \
     echo "Installing and checking GrimoireLab Release"
 RUN  sudo grimoirelab/utils/build_grimoirelab --build --install --check --install_system --relfile ${CONF_DIR}/requirements.cfg -l debug
 
