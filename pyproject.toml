@@ -50,7 +50,7 @@ file-read-backwards = "2.0.0"
 grimoirelab-toolkit = { version = ">=0.3", allow-prereleases = true}
 sortinghat = { branch = "pyjwt", git = "https://github.com/zhquan/grimoirelab-sortinghat"}
 kidash = { version = ">=0.5", allow-prereleases = true}
-grimoire-elk = { version = ">=0.102", allow-prereleases = true}
+grimoire-elk = { branch = "sortinghat_graphql", git = "https://github.com/zhquan/GrimoireELK"}
 grimoirelab-panels = { version = ">=0.1", allow-prereleases = true}
 perceval = { version = ">=0.19", allow-prereleases = true }
 perceval-mozilla = { version = ">=0.3", allow-prereleases = true}
